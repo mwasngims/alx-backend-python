@@ -153,4 +153,3 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
     def test_integration_placeholder(self):
         """Dummy test to satisfy parameterized_class check."""
         self.assertTrue(True)
-        
