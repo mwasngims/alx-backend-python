@@ -80,7 +80,8 @@ class TestGithubOrgClient(unittest.TestCase):
     def test_public_repos_with_license(self, mock_get_json):
         """Test public_repos filters repos by license key."""
         org_payload, repos_payload, expected_repos, apache2_repos = TEST_PAYLOAD[0]
-        mock_get_json.side_effect = [org_payload, repos_payload]
+        mock_get_json.assert_called_once_with(
+            f"https://api.github.com/orgs/{org_name}")
         client = GithubOrgClient("google")
         self.assertEqual(client.public_repos(), expected_repos)
         self.assertEqual(
