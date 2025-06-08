@@ -1,116 +1,100 @@
+from django.http import JsonResponse
+import time
 import logging
 from datetime import datetime
-from django.http import HttpResponseForbidden
-import time
-from django.http import JsonResponse
-from collections import defaultdict
+from django.http import HttpResponse
 
-# Configure logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logging.basicConfig(
+    filename='requests.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s'
+)
 
-# Create file handler
-file_handler = logging.FileHandler('requests.log')
-file_handler.setLevel(logging.INFO)
-
-# Formatter
-formatter = logging.Formatter('%(message)s')
-file_handler.setFormatter(formatter)
-
-# Add the handler to the logger (prevent multiple handler duplications)
-if not logger.hasHandlers():
-    logger.addHandler(file_handler)
 
 class RequestLoggingMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
+        # One-time configuration and initialization.
 
     def __call__(self, request):
-        user = request.user if request.user.is_authenticated else "Anonymous"
-        log_message = f"{datetime.now()} - User: {user} - Path: {request.path}"
-        logger.info(log_message)
-        return self.get_response(request)
+        # Code to be executed for each request before
+        # the view (and later middleware) are called.
+        logging.info(f"User: {request.user.id}")
+        response = self.get_response(request)
+
+        # Code to be executed for each request/response after
+        # the view is called.
+
+        return response
 
 
 class RestrictAccessByTimeMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
+        # One-time configuration and initialization.
 
     def __call__(self, request):
-        # Restrict access only to chat-related paths
-        restricted_paths = ['/api/messages/', '/api/conversations/']
-        
-        current_time = datetime.now().time()
-        start_time = datetime.strptime("18:00", "%H:%M").time()
-        end_time = datetime.strptime("21:00", "%H:%M").time()
+        # Code to be executed for each request before
+        # the view (and later middleware) are called.
+        current_hour = datetime.now().hour
+        if current_hour < 9 or current_hour > 17:
+            return HttpResponse("Access restricted to business hours (9 AM - 5 PM)", status=403)
 
-        # Only apply restriction to chat-related URLs
-        if request.path in restricted_paths:
-            if not (start_time <= current_time <= end_time):
-                return HttpResponseForbidden("Access to chat is restricted to between 6PM and 9PM.")
-        
-        return self.get_response(request)
+        response = self.get_response(request)
+
+        # Code to be executed for each request/response after
+        # the view is called.
+
+        return response
 
 
 class OffensiveLanguageMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
-        # Store IPs and their POST request timestamps
-        self.message_log = defaultdict(list)
-        self.TIME_WINDOW = 60  # seconds
-        self.MAX_MESSAGES = 5  # per minute
+        self.message_log = {}
+        self.limit = 5
+        self.time_window = 60
 
     def __call__(self, request):
-        if request.method == "POST" and request.path.startswith("/api/messages"):
+        if request.method == 'POST':
             ip = self.get_client_ip(request)
-            current_time = time.time()
+            now = time.time()
 
-            # Filter timestamps: keep only those within the time window
-            recent_messages = [
-                t for t in self.message_log[ip]
-                if current_time - t < self.TIME_WINDOW
-            ]
-            self.message_log[ip] = recent_messages
+            timestamps = self.message_log.get(ip, [])
+            timestamps = [t for t in timestamps if now - t < self.time_window]
 
-            if len(recent_messages) >= self.MAX_MESSAGES:
+            if len(timestamps) >= self.limit:
                 return JsonResponse(
-                    {"error": "Rate limit exceeded. Max 5 messages per minute."},
-                    status=429  # Too Many Requests
+                    {"error": "Too many messages. Please wait before sending more."},
+                    status=429
                 )
 
-            # Log the current POST time
-            self.message_log[ip].append(current_time)
+            timestamps.append(now)
+            self.message_log[ip] = timestamps
 
         return self.get_response(request)
 
     def get_client_ip(self, request):
-        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
-            return x_forwarded_for.split(',')[0]
+            return x_forwarded_for.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR')
-    
+
 
 class RolepermissionMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
+        # One-time configuration and initialization.
 
     def __call__(self, request):
-        protected_paths = ["/api/messages/", "/api/conversations/"]
+        # Code to be executed for each request before
+        # the view (and later middleware) are called.
+        if not request.user.is_staff:
+            return JsonResponse({"error": "Permission denied"}, status=403)
 
-        if request.path.startswith(tuple(protected_paths)):
-            user = request.user
-            if user.is_authenticated:
-                # Check for role-based access
-                user_role = getattr(user, 'role', None)
-                if user_role not in ['admin', 'moderator']:
-                    return JsonResponse(
-                        {"error": "Access denied. Admin or moderator role required."},
-                        status=403
-                    )
-            else:
-                return JsonResponse(
-                    {"error": "Authentication required."},
-                    status=403
-                )
+        response = self.get_response(request)
 
-        return self.get_response(request)
+        # Code to be executed for each request/response after
+        # the view is called.
+
+        return response
