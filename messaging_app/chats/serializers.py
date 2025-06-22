@@ -1,41 +1,43 @@
 from rest_framework import serializers
-from .models import User, Conversation, Message
+from .models import CustomUser, Conversation, Message
+
 
 class UserSerializer(serializers.ModelSerializer):
-    display_name = serializers.CharField(source='get_full_name', read_only=True)
+    """Serializer for the CustomUser model."""
+    phone_number = serializers.CharField()
 
     class Meta:
-        model = User
-        fields = [
-            'id', 'username', 'email', 'first_name', 'last_name',
-            'phone_number', 'bio', 'display_name'
-        ]
+        model = CustomUser
+        fields = ['user_id', 'username', 'email', 'first_name', 'last_name', 'phone_number']
+
 
 class MessageSerializer(serializers.ModelSerializer):
+    """Serializer for the Message model."""
     sender = UserSerializer(read_only=True)
-    short_message = serializers.SerializerMethodField()
+    message_body = serializers.CharField()
 
     class Meta:
         model = Message
-        fields = [
-            'message_id', 'conversation', 'sender', 'message_body',
-            'sent_at', 'short_message'
-        ]
-
-    def get_short_message(self, obj):
-        # Return the first 20 characters of the message body
-        return obj.message_body[:20]
+        fields = ['message_id', 'sender', 'message_body', 'sent_at']
 
     def validate_message_body(self, value):
-   #raise errors if the message body is empty
+        """Raise error if message body is empty."""
         if not value.strip():
-            raise serializers.ValidationError("Message body cannot be empty.")
+            raise serializers.ValidationError("Message body cannot be empty.")  # ✅ Correct usage
         return value
 
+
 class ConversationSerializer(serializers.ModelSerializer):
+    """Serializer for Conversation model including nested messages and participants."""
     participants = UserSerializer(many=True, read_only=True)
-    messages = MessageSerializer(many=True, read_only=True)
+    messages = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = ['conversation_id', 'participants', 'created_at', 'messages']
+
+    def get_messages(self, obj):
+        """Return serialized messages for a conversation."""
+        messages = obj.messages.all().order_by('sent_at')
+        return MessageSerializer(messages, many=True).data
+

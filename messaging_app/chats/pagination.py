@@ -1,15 +1,16 @@
+# chats/pagination.py
+
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.response import Response
 
 class MessagePagination(PageNumberPagination):
-    page_size = 20
+    """
+    Custom pagination class for messages.
+
+    This class paginates messages in sets of 20 per page.
+    The paginated response includes:
+    - page.paginator.count: total number of messages
+    - page.has_next(), page.has_previous(): navigation helpers
+    """
+    page_size = 20  # Fetch 20 messages per page
     page_size_query_param = 'page_size'
     max_page_size = 100
-
-    def get_paginated_response(self, data):
-        return Response({
-            'count': self.page.paginator.count,       
-            'next': self.get_next_link(),            
-            'previous': self.get_previous_link(),     
-            'results': data                           
-        })

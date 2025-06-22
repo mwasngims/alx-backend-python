@@ -1,29 +1,29 @@
+# chats/permissions.py
+
 from rest_framework import permissions
-from rest_framework.permissions import SAFE_METHODS
 
 class IsParticipantOfConversation(permissions.BasePermission):
     """
-    Custom permission to:
-    - Allow only authenticated users.
-    - Allow only participants of a conversation to access it.
-    - Allow only message senders to edit or delete their messages.
+    Allows access only to participants of a conversation.
+    Assumes the view has a `.get_object()` method returning a Message or Conversation
+    with sender and receiver or participants.
     """
 
     def has_permission(self, request, view):
+        # Must be authenticated for all methods
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        if hasattr(obj, 'participants'):
-            # obj is a Conversation
-            return request.user in obj.participants.all()
+        user = request.user
+        # Allow access only if user is part of the conversation
+        is_participant = False
 
-        elif hasattr(obj, 'conversation'):
-            # obj is a Message
-            # Check participant access for viewing
-            if request.method in SAFE_METHODS:
-                return request.user in obj.conversation.participants.all()
-            # For edits or deletes, only the sender can act
-            elif request.method in ['PUT', 'PATCH', 'DELETE']:
-                return request.user == obj.sender
+        if hasattr(obj, "participants"):
+            is_participant = user in obj.participants.all()
+        elif hasattr(obj, "sender") and hasattr(obj, "receiver"):
+            is_participant = user == obj.sender or user == obj.receiver
+
+        if request.method in ["GET", "POST", "PUT", "PATCH", "DELETE"]:
+            return is_participant
 
         return False
